@@ -112,7 +112,7 @@ runs:
           git commit -m "$RECOMMIT_MESSAGE"
           git push -u --force "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$default_branch"
         else
-          git push --set-upstream -u --force "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$default_branch"
+          git push --set-upstream -u --force "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git"
         fi
 
         cd -
