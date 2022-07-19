@@ -1,0 +1,126 @@
+name: Clear Commit History
+description: Clears Commit History of GitHub Repository
+branding:
+  icon: x
+  color: gray-dark
+inputs:
+  repository:
+    description: Repository (username/repo_name)
+    required: true
+  location:
+    description: Path to local copy
+    required: false
+  recommit:
+    description: Recommit current contents including uncommitted changes (enabled by default)
+    required: true
+    default: 'true'
+  recommit-message: 
+    description: Recommit commit message
+    required: false
+    default: Initial commit
+  token:
+    description: Personal Access Token
+    required: true
+  
+runs:
+  using: composite
+  steps:
+
+    - name: User Info
+      id: user-info
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        info=$(
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            /user \
+            --jq \
+              '
+              .login as $username
+              | .id as $id
+              | (
+                if .email == null then (
+                  ($id | tostring) + "+" + $username + "@users.noreply.github.com"
+                ) else (
+                  .email
+                ) end
+              ) as $public_email
+              | 
+              {
+                "username": $username,
+                "public_email": $public_email
+              }
+              '
+        )
+        echo "::set-output name=username::$(echo "$info" | jq -r '.username')"
+        echo "::set-output name=public-email::$(echo "$info" | jq -r '.public_email')"
+
+    - name: Clone
+      if: inputs.location == ''
+      id: clone
+      shell: bash
+      env:
+        REPOSITORY: ${{ inputs.repository }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        temp_dir=$(mktemp -d)
+        git clone --depth 1 "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$temp_dir"
+        echo "::set-output name=directory::$temp_dir"
+
+    - name: Locate
+      id: locate
+      shell: bash
+      env:
+        LOCATION: ${{ inputs.location }}
+        CLONE_DIRECTORY: ${{ steps.clone.outputs.directory }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        if [ "$LOCATION" = "" ]; then
+          location="$CLONE_DIRECTORY"
+        else
+          location="$LOCATION"
+        fi
+        echo "::set-output name=location::$location"
+
+    - name: Clear Commit History
+      shell: bash
+      env:
+        REPOSITORY: ${{ inputs.repository }}
+        LOCATION: ${{ steps.locate.outputs.location }}
+        RECOMMIT: ${{ inputs.recommit }}
+        RECOMMIT_MESSAGE: ${{ inputs.recommit-message }}
+        USERNAME: ${{ steps.user-info.outputs.username }}
+        EMAIL: ${{ steps.user-info.outputs.public-email }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        # Source: https://stackoverflow.com/questions/9683279/make-the-current-commit-the-only-initial-commit-in-a-git-repository
+
+        cd "$LOCATION"
+
+        default_branch=$(gh repo view "$REPOSITORY" --json defaultBranchRef --jq '.defaultBranchRef.name')
+
+        # Delete History
+        rm -rf .git
+
+        # Reconstruct
+        git init -b "$default_branch"
+        git config user.email "$EMAIL"
+        git config user.name "$USERNAME"
+        if "$RECOMMIT"; then
+          git add .
+          git commit -m "$RECOMMIT_MESSAGE"
+        fi
+
+        # Push
+        git push -u --force "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$default_branch"
+
+        cd -
+
+    - name: Clean Up
+      if: inputs.location == ''
+      shell: bash
+      env:
+        DIRECTORY: ${{ steps.clone.outputs.directory }}
+      run: rm -rf "$DIRECTORY"

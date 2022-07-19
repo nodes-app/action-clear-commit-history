@@ -1,0 +1,37 @@
+name: Test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    
+      - name: Checkout
+        uses: actions/checkout@v3
+      
+      - name: Create Test Repository
+        uses: nodes-app/action-create-repo@v1
+        with:
+          name: action-clear-commit-history-test
+          owner: nodes-bot
+          description: This is a test
+          template: actions/javascript-action
+          token: ${{ secrets.GH_ACCESS_TOKEN }}
+
+      - name: Wait
+        run: sleep 3
+
+      - name: Clear Commit History
+        uses: ./
+        with:
+          repository: nodes-bot/action-clear-commit-history-test
+          token: ${{ secrets.GH_ACCESS_TOKEN }}
+
+      - name: Wait
+        run: sleep 3
+
+      - name: Delete Test Repository
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
+        run: |
+          gh repo delete "nodes-bot/action-clear-commit-history-test" --confirm
