@@ -101,20 +101,19 @@ runs:
 
         default_branch=$(gh repo view "$REPOSITORY" --json defaultBranchRef --jq '.defaultBranchRef.name')
 
-        # Delete History
         rm -rf .git
 
-        # Reconstruct
         git init -b "$default_branch"
         git config user.email "$EMAIL"
         git config user.name "$USERNAME"
+
         if "$RECOMMIT"; then
           git add .
           git commit -m "$RECOMMIT_MESSAGE"
+          git push -u --force "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$default_branch"
+        else
+          git push -u --force "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git"
         fi
-
-        # Push
-        git push -u --force "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$default_branch"
 
         cd -
 
