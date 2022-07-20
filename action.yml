@@ -74,17 +74,7 @@ runs:
         fi
         
         echo "::set-output name=directory::$directory"
-
-    - name: Delete Contents
-      if: inputs.keep-contents != 'true'
-      shell: bash
-      env:
-        REPOSITORY: ${{ inputs.repository }}
-        DIRECTORY: ${{ steps.temp-copy.outputs.directory }}
-      run: |
-        rm -rfv "$DIRECTORY/*"
-        echo "# $(basename "$REPOSITORY")" > "$DIRECTORY/README.md"
-
+        
     - name: Clear Commit History
       shell: bash
       env:
@@ -102,7 +92,12 @@ runs:
 
         default_branch=$(gh repo view "$REPOSITORY" --json defaultBranchRef --jq '.defaultBranchRef.name')
 
-        rm -rf .git
+        if "$KEEP_CONTENTS"; then
+          rm -rf .git
+        else
+          rm -rf *.
+          echo "# $(basename "$REPOSITORY")" > "$DIRECTORY/README.md"
+        fi
 
         git init -b "$default_branch"
         git config user.email "$EMAIL"
