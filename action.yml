@@ -96,7 +96,7 @@ runs:
           rm -rf .git
         else
           rm -rf *.
-          echo "# $(basename "$REPOSITORY")" > "$DIRECTORY/README.md"
+          echo "# $(basename "$REPOSITORY")" > README.md
         fi
 
         git init -b "$default_branch"
