@@ -82,7 +82,7 @@ runs:
         REPOSITORY: ${{ inputs.repository }}
         DIRECTORY: ${{ steps.temp-copy.outputs.directory }}
       run: |
-        rm -rf "$DIRECTORY/*"
+        rm -rfv "$DIRECTORY/*"
         echo "# $(basename "$REPOSITORY")" > "$DIRECTORY/README.md"
 
     - name: Clear Commit History
