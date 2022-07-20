@@ -57,29 +57,11 @@ runs:
         echo "::set-output name=username::$(echo "$info" | jq -r '.username')"
         echo "::set-output name=public-email::$(echo "$info" | jq -r '.public_email')"
 
-    - name: Create Temporary Copy
-      id: temp-copy
-      shell: bash
-      env:
-        REPOSITORY: ${{ inputs.repository }}
-        LOCATION: ${{ inputs.location }}
-        GITHUB_TOKEN: ${{ inputs.token }}
-      run: |
-        directory=$(mktemp -d)
-
-        if [ "$LOCATION" = '' ]; then
-          git clone --depth 1 "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$directory"
-        else
-          cp -r "$LOCATION/." "$directory"
-        fi
-        
-        echo "::set-output name=directory::$directory"
-        
     - name: Clear Commit History
       shell: bash
       env:
         REPOSITORY: ${{ inputs.repository }}
-        DIRECTORY: ${{ steps.temp-copy.outputs.directory }}
+        LOCATION: ${{ inputs.location }}
         KEEP_CONTENTS: ${{ inputs.keep-contents }}
         COMMIT_MESSAGE: ${{ inputs.commit-message }}
         USERNAME: ${{ steps.user-info.outputs.username }}
@@ -88,16 +70,22 @@ runs:
       run: |
         # Source: https://stackoverflow.com/questions/9683279/make-the-current-commit-the-only-initial-commit-in-a-git-repository
 
-        cd "$DIRECTORY"
-
-        default_branch=$(gh repo view "$REPOSITORY" --json defaultBranchRef --jq '.defaultBranchRef.name')
+        directory=$(mktemp -d)
 
         if "$KEEP_CONTENTS"; then
-          rm -rf .git
+          if [ -z "$LOCATION" ]; then
+            git clone --depth 1 "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$directory"
+          else
+            cp -r "$LOCATION/." "$directory"
+          fi
+          rm -rf "$directory/.git"
         else
-          rm -rf *.
-          echo "# $(basename "$REPOSITORY")" > README.md
+          echo "# $(basename "$REPOSITORY")" > "$directory/README.md"
         fi
+
+        cd "$directory"
+
+        default_branch=$(gh repo view "$REPOSITORY" --json defaultBranchRef --jq '.defaultBranchRef.name')
 
         git init -b "$default_branch"
         git config user.email "$EMAIL"
@@ -109,8 +97,4 @@ runs:
 
         cd -
 
-    - name: Delete Temporary Copy
-      shell: bash
-      env:
-        DIRECTORY: ${{ steps.temp-copy.outputs.directory }}
-      run: rm -rf "$DIRECTORY"
+        rm -rf "$directory"
