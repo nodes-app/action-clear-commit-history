@@ -49,11 +49,11 @@ jobs:
       - name: Wait
         run: sleep 3
 
-      - name: Clear Commit History Without Recommit
+      - name: Clear Commit History and Discard Contents
         uses: ./
         with:
           repository: nodes-bot/action-clear-commit-history-test
-          recommit: false
+          keep-contents: false
           token: ${{ secrets.GH_ACCESS_TOKEN }}
               
       - name: Wait

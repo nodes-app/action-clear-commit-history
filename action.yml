@@ -10,14 +10,14 @@ inputs:
   location:
     description: Path to local copy
     required: false
-  recommit:
-    description: Recommit current contents including uncommitted changes (enabled by default)
+  commit-message: 
+    description: Recommit commit message
+    required: true
+    default: Initial commit
+  keep-contents:
+    description: Keep current contents including uncommitted changes (enabled by default)
     required: true
     default: 'true'
-  recommit-message: 
-    description: Recommit commit message
-    required: false
-    default: Initial commit
   token:
     description: Personal Access Token
     required: true
@@ -57,47 +57,48 @@ runs:
         echo "::set-output name=username::$(echo "$info" | jq -r '.username')"
         echo "::set-output name=public-email::$(echo "$info" | jq -r '.public_email')"
 
-    - name: Clone
-      if: inputs.location == ''
-      id: clone
+    - name: Create Temporary Copy
+      id: temp-copy
       shell: bash
       env:
         REPOSITORY: ${{ inputs.repository }}
+        LOCATION: ${{ inputs.location }}
         GITHUB_TOKEN: ${{ inputs.token }}
       run: |
-        temp_dir=$(mktemp -d)
-        git clone --depth 1 "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$temp_dir"
-        echo "::set-output name=directory::$temp_dir"
+        directory=$(mktemp -d)
 
-    - name: Locate
-      id: locate
+        if [ "$LOCATION" = '' ]; then
+          git clone --depth 1 "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$directory"
+        else
+          cp -r "$LOCATION/." "$directory"
+        fi
+        
+        echo "::set-output name=directory::$directory"
+
+    - name: Delete Contents
+      if: inputs.keep-contents != 'true'
       shell: bash
       env:
-        LOCATION: ${{ inputs.location }}
-        CLONE_DIRECTORY: ${{ steps.clone.outputs.directory }}
-        GITHUB_TOKEN: ${{ inputs.token }}
+        REPOSITORY: ${{ inputs.repository }}
+        DIRECTORY: ${{ steps.temp-copy.outputs.directory }}
       run: |
-        if [ "$LOCATION" = "" ]; then
-          location="$CLONE_DIRECTORY"
-        else
-          location="$LOCATION"
-        fi
-        echo "::set-output name=location::$location"
+        rm -rf "$DIRECTORY/*"
+        echo "# $(basename "$REPOSITORY")" > "$DIRECTORY/README.md"
 
     - name: Clear Commit History
       shell: bash
       env:
         REPOSITORY: ${{ inputs.repository }}
-        LOCATION: ${{ steps.locate.outputs.location }}
-        RECOMMIT: ${{ inputs.recommit }}
-        RECOMMIT_MESSAGE: ${{ inputs.recommit-message }}
+        DIRECTORY: ${{ steps.temp-copy.outputs.directory }}
+        KEEP_CONTENTS: ${{ inputs.keep-contents }}
+        COMMIT_MESSAGE: ${{ inputs.commit-message }}
         USERNAME: ${{ steps.user-info.outputs.username }}
         EMAIL: ${{ steps.user-info.outputs.public-email }}
         GITHUB_TOKEN: ${{ inputs.token }}
       run: |
         # Source: https://stackoverflow.com/questions/9683279/make-the-current-commit-the-only-initial-commit-in-a-git-repository
 
-        cd "$LOCATION"
+        cd "$DIRECTORY"
 
         default_branch=$(gh repo view "$REPOSITORY" --json defaultBranchRef --jq '.defaultBranchRef.name')
 
@@ -107,19 +108,14 @@ runs:
         git config user.email "$EMAIL"
         git config user.name "$USERNAME"
 
-        if "$RECOMMIT"; then
-          git add .
-          git commit -m "$RECOMMIT_MESSAGE"
-          git push -u --force "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$default_branch"
-        else
-          git push -u --force "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$default_branch"
-        fi
+        git add .
+        git commit -m "$COMMIT_MESSAGE"
+        git push -u --force "https://$GITHUB_TOKEN@github.com/$REPOSITORY.git" "$default_branch"
 
         cd -
 
-    - name: Clean Up
-      if: inputs.location == ''
+    - name: Delete Temporary Copy
       shell: bash
       env:
-        DIRECTORY: ${{ steps.clone.outputs.directory }}
+        DIRECTORY: ${{ steps.temp-copy.outputs.directory }}
       run: rm -rf "$DIRECTORY"
